@@ -1,0 +1,11 @@
+m.select("a") == "1" | 1
+m.update("a", "3") | 3
+m += {"x", "100"} | 100
+m["v2"] == 2 | 2
+~m | 
+!m | Map with 0 entries.
+m2 == m3 | 1
+m2 != m3 | 1
+m2 < m3 | 0
+--------------
+All tests passed!

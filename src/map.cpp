@@ -1,47 +1,82 @@
 #include "map.h"
-#include <algorithm>
+#include <cstring>
 
 namespace MyProject {
 
-class Map::Impl {
-public:
+struct Map::Impl {
     struct Entry {
-        std::string key;
-        std::string value;
-
+        KeyType key;
+        ValueType value;
         bool operator==(const Entry& other) const {
             return key == other.key && value == other.value;
         }
-
         bool operator<(const Entry& other) const {
             return key < other.key || (key == other.key && value < other.value);
         }
     };
 
-    std::vector<Entry> data;
-    static int objectCount;
+    Entry* data;
+    size_t size;
+    size_t capacity;
 
-    ~Impl() {
-        --objectCount;
-    }
-
-    Impl() {
+    Impl() : data(new Entry[4]), size(0), capacity(4) {
         ++objectCount;
     }
 
+    Impl(const Impl& other) : data(new Entry[other.capacity]), size(other.size), capacity(other.capacity) {
+        for (size_t i = 0; i < size; ++i) {
+            data[i] = other.data[i];
+        }
+        ++objectCount;
+    }
+
+    ~Impl() {
+        delete[] data;
+        --objectCount;
+    }
+
+    Impl& operator=(const Impl& other) {
+        if (this != &other) {
+            delete[] data;
+            size = other.size;
+            capacity = other.capacity;
+            data = new Entry[capacity];
+            for (size_t i = 0; i < size; ++i) {
+                data[i] = other.data[i];
+            }
+        }
+        return *this;
+    }
+
     Entry* find(const std::string& key) {
-        for (auto& e : data) {
-            if (e.key == key) return &e;
+        for (size_t i = 0; i < size; ++i) {
+            if (data[i].key == key) {
+                return &data[i];
+            }
         }
         return nullptr;
     }
 
     const Entry* find(const std::string& key) const {
-        for (const auto& e : data) {
-            if (e.key == key) return &e;
+        for (size_t i = 0; i < size; ++i) {
+            if (data[i].key == key) {
+                return &data[i];
+            }
         }
         return nullptr;
     }
+
+    void resize() {
+        capacity *= 2;
+        Entry* newData = new Entry[capacity];
+        for (size_t i = 0; i < size; ++i) {
+            newData[i] = data[i];
+        }
+        delete[] data;
+        data = newData;
+    }
+
+    static int objectCount;
 };
 
 int Map::Impl::objectCount = 0;
@@ -50,8 +85,7 @@ Map::Map() : pImpl(new Impl) {}
 Map::Map(const Map& other) : pImpl(new Impl(*other.pImpl)) {}
 Map& Map::operator=(const Map& other) {
     if (this != &other) {
-        delete pImpl;
-        pImpl = new Impl(*other.pImpl);
+        *pImpl = *other.pImpl;
     }
     return *this;
 }
@@ -59,38 +93,64 @@ Map::~Map() {
     delete pImpl;
 }
 
+int Map::getObjectCount() {
+    return Impl::objectCount;
+}
+
 void Map::insert(const std::string& key, const std::string& value) {
-    if (pImpl->find(key)) throw std::invalid_argument("Key already exists");
-    pImpl->data.push_back({key, value});
+    if (pImpl->find(key)) {
+        throw std::invalid_argument("Key already exists");
+    }
+    if (pImpl->size == pImpl->capacity) {
+        pImpl->resize();
+    }
+    pImpl->data[pImpl->size++] = {key, value};
 }
 
 std::string Map::select(const std::string& key) const {
     auto entry = pImpl->find(key);
-    if (!entry) throw std::invalid_argument("Key not found");
+    if (!entry) {
+        throw std::invalid_argument("Key not found");
+    }
     return entry->value;
 }
 
 void Map::update(const std::string& key, const std::string& value) {
     auto entry = pImpl->find(key);
-    if (!entry) throw MyException("Special update error: key not found");
+    if (!entry) {
+        throw MyException("Special update error: key not found");
+    }
     entry->value = value;
 }
 
 void Map::remove(const std::string& key) {
-    auto& d = pImpl->data;
-    auto it = std::remove_if(d.begin(), d.end(), [&key](const auto& e) { return e.key == key; });
-    if (it == d.end()) throw std::invalid_argument("Key not found for deletion");
-    d.erase(it, d.end());
+    for (size_t i = 0; i < pImpl->size; ++i) {
+        if (pImpl->data[i].key == key) {
+            for (size_t j = i; j < pImpl->size - 1; ++j)
+                pImpl->data[j] = pImpl->data[j + 1];
+            --pImpl->size;
+            return;
+        }
+    }
+    throw std::invalid_argument("Key not found for deletion");
 }
 
 std::string Map::toString() const {
     std::ostringstream oss;
-    oss << "Map with " << pImpl->data.size() << " entries.";
+    oss << "Map with " << pImpl->size << " entries.";
     return oss.str();
 }
 
 bool Map::operator==(const Map& other) const {
-    return pImpl->data == other.pImpl->data;
+    if (pImpl->size != other.pImpl->size) {
+        return false;
+    }
+    for (size_t i = 0; i < pImpl->size; ++i) {
+        if (!(pImpl->data[i] == other.pImpl->data[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool Map::operator!=(const Map& other) const {
@@ -98,11 +158,11 @@ bool Map::operator!=(const Map& other) const {
 }
 
 bool Map::operator<(const Map& other) const {
-    return pImpl->data.size() < other.pImpl->data.size();
+    return pImpl->size < other.pImpl->size;
 }
 
 bool Map::operator>(const Map& other) const {
-    return pImpl->data.size() > other.pImpl->data.size();
+    return pImpl->size > other.pImpl->size;
 }
 
 bool Map::operator<=(const Map& other) const {
@@ -124,25 +184,24 @@ Map& Map::operator-=(const std::string& key) {
 }
 
 Map& Map::operator~() {
-    for (auto& e : pImpl->data) e.value = "";
+    for (size_t i = 0; i < pImpl->size; ++i){
+        pImpl->data[i].value = "";
+    }
     return *this;
 }
 
 Map& Map::operator!() {
-    pImpl->data.clear();
+    pImpl->size = 0;
     return *this;
 }
 
 int Map::operator[](const std::string& value) const {
-    for (size_t i = 0; i < pImpl->data.size(); ++i) {
-        if (pImpl->data[i].value == value) return static_cast<int>(i);
+    for (size_t i = 0; i < pImpl->size; ++i) {
+        if (pImpl->data[i].value == value) {
+            return static_cast<int>(i);
+        }
     }
     throw MyException("Value not found");
 }
-
-int Map::getObjectCount() {
-    return Impl::objectCount;
-}
-
 
 } // namespace MyProject

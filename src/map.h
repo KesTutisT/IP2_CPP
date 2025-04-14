@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <iostream>
 #include <sstream>
-#include <vector>
 
 namespace MyProject {
 
@@ -22,7 +21,6 @@ public:
 
 // Map klase
 /**
- * @author Kęstutis Karneckas
  * @class Map
  * @brief Asociatyvaus masyvo realizacija naudojant PIMPL.
  *
@@ -68,7 +66,7 @@ public:
     static int getObjectCount();
 
 private:
-    class Impl;
+    struct Impl;
     Impl* pImpl;
 };
 
