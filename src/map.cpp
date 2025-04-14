@@ -198,7 +198,7 @@ Map& Map::operator!() {
 int Map::operator[](const std::string& value) const {
     for (size_t i = 0; i < pImpl->size; ++i) {
         if (pImpl->data[i].value == value) {
-            return static_cast<int>(i);
+            return static_cast<int>(i + 1);
         }
     }
     throw MyException("Value not found");
